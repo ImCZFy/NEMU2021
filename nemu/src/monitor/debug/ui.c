@@ -38,6 +38,12 @@ static int cmd_q(char *args) {
 
 static int cmd_help(char *args);
 
+static int cmd_si(char *args);
+
+static int cmd_info(char *args);
+
+static int cmd_x(char *args);
+
 static struct {
 	char *name;
 	char *description;
@@ -46,9 +52,9 @@ static struct {
 	{ "help", "Display informations about all supported commands", cmd_help },
 	{ "c", "Continue the execution of the program", cmd_c },
 	{ "q", "Exit NEMU", cmd_q },
-
-	/* TODO: Add more commands */
-
+	{ "si", "Step N instructions exactly. The default value of N is 1.", cmd_si },
+	{ "info", "Print the information of registers or watchpoints. Usage: info r", cmd_info },
+	{ "x", "Scan the memory. Usage: x N EXPR", cmd_x },
 };
 
 #define NR_CMD (sizeof(cmd_table) / sizeof(cmd_table[0]))
@@ -74,6 +80,72 @@ static int cmd_help(char *args) {
 		printf("Unknown command '%s'\n", arg);
 	}
 	return 0;
+}
+
+static int cmd_si(char *args) {
+    unsigned int n = 1;
+    char extra;
+	// Ignore the front space, then read u and c, %u represents an unsigned integer, %c represents extra chars which will be saved in extra.
+    if (args != NULL && sscanf(args, " %u %c", &n, &extra) != 1) {
+        printf("Usage: si [N]\n");
+        return 0;
+    }
+
+    cpu_exec(n);
+    return 0;
+}
+
+static int cmd_info(char *args) {
+    char subcmd;
+    char extra;
+	int i;
+
+    if (args == NULL || sscanf(args, " %c %c", &subcmd, &extra) != 1) {
+        printf("Usage: info r\n");
+        return 0;
+    }
+
+	if (subcmd == 'r') {
+		for (i = 0; i < 8; i++) {
+			printf("%-3s  0x%08x  %u\n", regsl[i], reg_l(i), reg_l(i));
+		}
+
+		printf("eip  0x%08x  %u\n", cpu.eip, cpu.eip);
+		printf("eflags  0x%08x\n", cpu.eflags.val);
+
+	} else if (subcmd == 'w') {
+		// TODO: Implement watchpoint information display in the following PA.
+	}
+	else {
+		printf("Unknown subcommand '%c'\n", subcmd);
+	}
+    return 0;
+}
+
+static int cmd_x(char *args) {
+    unsigned int n;
+    unsigned int address;
+    char extra;
+
+	unsigned int i;
+
+    if (args == NULL || sscanf(args, " %u %x %c", &n, &address, &extra) != 2 || n == 0) {
+        printf("Usage: x N EXPR\n");
+        return 0;
+    }
+
+    if ((uint64_t)address + (uint64_t)n * 4 > HW_MEM_SIZE) {
+        printf("Memory range is out of bounds\n");
+        return 0;
+    }
+
+    for (i = 0; i < n; i++) {
+        uint32_t current = address + i * 4;
+        uint32_t value = swaddr_read(current, 4);
+
+        printf("0x%08x: 0x%08x\n", current, value);
+    }
+    return 0;
 }
 
 void ui_mainloop() {
