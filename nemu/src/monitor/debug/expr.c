@@ -5,6 +5,8 @@
  */
 #include <sys/types.h>
 #include <regex.h>
+#include <stdlib.h>
+#include <errno.h>
 
 enum {
 	NOTYPE = 256,
@@ -16,7 +18,7 @@ static struct rule {
 	char *regex;
 	int token_type;
 } rules[] = {
-	{"[[:space:]]", NOTYPE},
+	{"[[:space:]]+", NOTYPE},
 	{"[0-9]+", NUM},
 	{"==", EQ},
 	{"\\+", '+'},
@@ -109,14 +111,188 @@ static bool make_token(char *e) {
 	return true; 
 }
 
-uint32_t expr(char *e, bool *success) {
-	if(!make_token(e)) {
+static bool check_parentheses(int p, int q, bool *success) {
+	int depth = 0;
+	int i;
+	bool enclosed;
+
+	enclosed = (tokens[p].type == '(' && tokens[q].type == ')');
+
+	for (i = p; i <= q; i++) {
+
+		if (tokens[i].type == '(') {
+			depth++;
+		} else if (tokens[i].type == ')') {
+			depth--;
+
+			if (depth < 0) {
+			*success = false;
+			return false;
+		}
+
+		if (depth == 0 && i < q) {
+			enclosed = false;
+		}
+	}
+	if (depth != 0) {
+		*success = false;
+		return false;
+	}
+	}
+	return enclosed;
+}
+
+
+static int precedence(int op) {
+	switch (op) {
+		case '+':
+		case '-':
+			return 1;
+
+		case '*':
+		case '/':
+			return 2;
+			
+		default:
+			return -1;
+	}
+}
+
+static int find_dominant_op(int p, int q) {
+	int depth = 0;
+	int dominant_op = -1;
+	int lowest_precedence = 100;
+	int current_precedence;
+	int i;
+
+	for (i = p; i <= q; i++) {
+		if (tokens[i].type == '(') {
+			depth++;
+		} else if (tokens[i].type == ')') {
+			depth--;
+		} else if (depth == 0) {
+			current_precedence = precedence(tokens[i].type);
+			if (current_precedence > 0 && current_precedence <= lowest_precedence) {
+				lowest_precedence = current_precedence;
+				dominant_op = i;
+			}
+		}
+	}
+	return dominant_op;
+}
+
+static uint32_t eval(int p, int q, bool *success) {
+	int op;
+	int op_type;
+	bool enclosed;
+	uint32_t val1;
+	uint32_t val2;
+
+	if(p > q) {
 		*success = false;
 		return 0;
 	}
 
-	/* TODO: Insert codes to evaluate the expression. */
-	panic("please implement me");
-	return 0;
+	if(p == q) {
+		char *endptr;
+		unsigned long val;
+
+		if(tokens[p].type != NUM) {
+			*success = false;
+			return 0;
+		}
+
+		errno = 0;
+		endptr = NULL;
+
+		val = strtoul(tokens[p].str, &endptr, 10);
+
+		if(errno == ERANGE ||
+				endptr == tokens[p].str ||
+				*endptr != '\0' ||
+				(uint64_t)val > (uint64_t)UINT32_MAX) {
+			*success = false;
+			return 0;
+		}
+		return (uint32_t)val;
+	}
+	enclosed = check_parentheses(p, q, success);
+
+	if(!*success) {
+		return 0;
+	}
+
+	if(enclosed) {
+		return eval(p + 1, q - 1, success);
+	}
+
+	op = find_dominant_op(p, q);
+
+	if(op < 0) {
+		*success = false;
+		return 0;
+	}
+
+	op_type = tokens[op].type;
+
+	val1 = eval(p, op - 1, success);
+
+	if(!*success) {
+		return 0;
+	}
+
+	val2 = eval(op + 1, q, success);
+
+	if(!*success) {
+		return 0;
+	}
+
+	switch(op_type) {
+		case '+':
+			return val1 + val2;
+
+		case '-':
+			return val1 - val2;
+
+		case '*':
+			return val1 * val2;
+
+		case '/':
+			if(val2 == 0) {
+				*success = false;
+				return 0;
+			}
+
+			return val1 / val2;
+
+		default:
+			*success = false;
+			return 0;
+	}
+}
+
+uint32_t expr(char *e, bool *success) {
+
+	uint32_t result = 0;
+
+	if (success == NULL) {
+		return 0;
+	}
+
+	*success = false;
+
+	if (e == NULL || !make_token(e) || nr_token == 0) {
+		return 0;
+	}
+
+	*success = true;
+
+	result = eval(0, nr_token - 1, success);
+
+	if (!*success) {
+		return 0;
+	}
+
+	return result;
 }
 

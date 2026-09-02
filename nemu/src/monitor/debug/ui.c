@@ -44,6 +44,8 @@ static int cmd_info(char *args);
 
 static int cmd_x(char *args);
 
+static int cmd_p(char *args);
+
 static struct {
 	char *name;
 	char *description;
@@ -55,6 +57,7 @@ static struct {
 	{ "si", "Step N instructions exactly. The default value of N is 1.", cmd_si },
 	{ "info", "Print the information of registers or watchpoints. Usage: info r", cmd_info },
 	{ "x", "Scan the memory. Usage: x N EXPR", cmd_x },
+	{ "p", "Evaluate the expression EXPR and print its value. Usage: p EXPR", cmd_p },
 };
 
 #define NR_CMD (sizeof(cmd_table) / sizeof(cmd_table[0]))
@@ -146,6 +149,23 @@ static int cmd_x(char *args) {
         printf("0x%08x: 0x%08x\n", current, value);
     }
     return 0;
+}
+
+static int cmd_p(char *args) {
+	if (args == NULL) {
+		printf("Usage: p EXPR\n");
+		return 0;
+	}
+
+	bool success;
+	uint32_t result = expr(args, &success);
+
+	if (success) {
+		printf("Result: %u (0x%08x)\n", result, result);
+	} else {
+		printf("Invalid expression: %s\n", args);
+	}
+	return 0;
 }
 
 void ui_mainloop() {
