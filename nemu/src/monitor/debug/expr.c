@@ -7,24 +7,24 @@
 #include <regex.h>
 
 enum {
-	NOTYPE = 256, EQ
-
-	/* TODO: Add more token types */
-
+	NOTYPE = 256,
+	NUM,
+	EQ
 };
 
 static struct rule {
 	char *regex;
 	int token_type;
 } rules[] = {
-
-	/* TODO: Add more rules.
-	 * Pay attention to the precedence level of different rules.
-	 */
-
-	{" +",	NOTYPE},				// spaces
-	{"\\+", '+'},					// plus
-	{"==", EQ}						// equal
+	{"[[:space:]]", NOTYPE},
+	{"[0-9]+", NUM},
+	{"==", EQ},
+	{"\\+", '+'},
+	{"\\-", '-'},
+	{"\\*", '*'},
+	{"\\/", '/'},
+	{"\\(", '('},
+	{"\\)", ')'},
 };
 
 #define NR_REGEX (sizeof(rules) / sizeof(rules[0]) )
@@ -73,19 +73,33 @@ static bool make_token(char *e) {
 				Log("match rules[%d] = \"%s\" at position %d with len %d: %.*s", i, rules[i].regex, position, substr_len, substr_len, substr_start);
 				position += substr_len;
 
-				/* TODO: Now a new token is recognized with rules[i]. Add codes
-				 * to record the token in the array `tokens'. For certain types
-				 * of tokens, some extra actions should be performed.
-				 */
-
-				switch(rules[i].token_type) {
-					default: panic("please implement me");
+				if (rules[i].token_type != NOTYPE && nr_token >= (int)(sizeof(tokens) / sizeof(tokens[0]))) {
+					printf("too many tokens\n");
+					return false;
 				}
 
+				switch(rules[i].token_type) {
+					case NOTYPE:
+						break;
+					case NUM:
+						if ((size_t)substr_len >= sizeof(tokens[nr_token].str)) {
+							printf("number too long\n");
+							return false;
+						}
+						tokens[nr_token].type = NUM;
+						memcpy(tokens[nr_token].str, substr_start, substr_len);
+						tokens[nr_token].str[substr_len] = '\0';
+						nr_token++;
+						break;
+					default:
+						tokens[nr_token].type = rules[i].token_type;
+						tokens[nr_token].str[0] = '\0';
+						nr_token++;
+						break;
+				}
 				break;
 			}
 		}
-
 		if(i == NR_REGEX) {
 			printf("no match at position %d\n%s\n%*.s^\n", position, e, position, "");
 			return false;
