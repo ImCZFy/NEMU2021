@@ -4,6 +4,7 @@
 #include "nemu.h"
 
 #include <stdlib.h>
+#include <ctype.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -127,15 +128,39 @@ static int cmd_info(char *args) {
 
 static int cmd_x(char *args) {
     unsigned int n;
-    unsigned int address;
-    char extra;
-
+	int expression_position;
+	uint32_t address;
+	uint32_t current;
+	uint32_t value;
+	bool success;
 	unsigned int i;
 
-    if (args == NULL || sscanf(args, " %u %x %c", &n, &address, &extra) != 2 || n == 0) {
+	expression_position = 0;
+
+	if (args == NULL ||
+			sscanf(args, " %u%n", &n, &expression_position) != 1 ||
+			n == 0 ||
+			args[expression_position] == '\0' ||
+			!isspace((unsigned char)args[expression_position])) {
         printf("Usage: x N EXPR\n");
         return 0;
     }
+
+	while(isspace((unsigned char)args[expression_position])) {
+		expression_position ++;
+	}
+
+	if(args[expression_position] == '\0') {
+		printf("Usage: x N EXPR\n");
+		return 0;
+	}
+
+	address = expr(args + expression_position, &success);
+
+	if(!success) {
+		printf("Invalid expression: %s\n", args + expression_position);
+		return 0;
+	}
 
     if ((uint64_t)address + (uint64_t)n * 4 > HW_MEM_SIZE) {
         printf("Memory range is out of bounds\n");
@@ -143,8 +168,8 @@ static int cmd_x(char *args) {
     }
 
     for (i = 0; i < n; i++) {
-        uint32_t current = address + i * 4;
-        uint32_t value = swaddr_read(current, 4);
+		current = address + i * 4;
+		value = swaddr_read(current, 4);
 
         printf("0x%08x: 0x%08x\n", current, value);
     }

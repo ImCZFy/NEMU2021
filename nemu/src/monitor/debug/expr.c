@@ -11,7 +11,12 @@
 enum {
 	NOTYPE = 256,
 	NUM,
-	EQ
+	HEX,
+	REG,
+	EQ,
+	NEQ,
+	AND,
+	OR
 };
 
 static struct rule {
@@ -19,12 +24,18 @@ static struct rule {
 	int token_type;
 } rules[] = {
 	{"[[:space:]]+", NOTYPE},
+	{"0[xX][0-9a-fA-F]+", HEX},
 	{"[0-9]+", NUM},
+	{"\\$[a-z][a-z0-9]*", REG},
 	{"==", EQ},
+	{"!=", NEQ},
+	{"&&", AND},
+	{"\\|\\|", OR},
 	{"\\+", '+'},
 	{"\\-", '-'},
 	{"\\*", '*'},
 	{"\\/", '/'},
+	{"!", '!'},
 	{"\\(", '('},
 	{"\\)", ')'},
 };
@@ -84,11 +95,13 @@ static bool make_token(char *e) {
 					case NOTYPE:
 						break;
 					case NUM:
+					case HEX:
+					case REG:
 						if ((size_t)substr_len >= sizeof(tokens[nr_token].str)) {
-							printf("number too long\n");
+							printf("token too long\n");
 							return false;
 						}
-						tokens[nr_token].type = NUM;
+						tokens[nr_token].type = rules[i].token_type;
 						memcpy(tokens[nr_token].str, substr_start, substr_len);
 						tokens[nr_token].str[substr_len] = '\0';
 						nr_token++;
@@ -147,13 +160,23 @@ static bool check_parentheses(int p, int q, bool *success) {
 
 static int precedence(int op) {
 	switch (op) {
+		case OR:
+			return 1;
+
+		case AND:
+			return 2;
+
+		case EQ:
+		case NEQ:
+			return 3;
+
 		case '+':
 		case '-':
-			return 1;
+			return 4;
 
 		case '*':
 		case '/':
-			return 2;
+			return 5;
 
 		default:
 			return -1;
@@ -183,9 +206,48 @@ static int find_dominant_op(int p, int q) {
 	return dominant_op;
 }
 
+static bool read_register(char *name, uint32_t *value) {
+	char *register_name;
+	int i;
+
+	if(name == NULL || value == NULL || name[0] != '$') {
+		return false;
+	}
+
+	register_name = name + 1;
+
+	for(i = 0; i < 8; i ++) {
+		if(strcmp(register_name, regsl[i]) == 0) {
+			*value = reg_l(i);
+			return true;
+		}
+		if(strcmp(register_name, regsw[i]) == 0) {
+			*value = reg_w(i);
+			return true;
+		}
+		if(strcmp(register_name, regsb[i]) == 0) {
+			*value = reg_b(i);
+			return true;
+		}
+	}
+
+	if(strcmp(register_name, "eip") == 0) {
+		*value = cpu.eip;
+		return true;
+	}
+
+	if(strcmp(register_name, "eflags") == 0) {
+		*value = cpu.eflags.val;
+		return true;
+	}
+
+	return false;
+}
+
 static uint32_t eval(int p, int q, bool *success) {
 	int op;
 	int op_type;
+	int base;
 	bool enclosed;
 	uint32_t val1;
 	uint32_t val2;
@@ -199,15 +261,24 @@ static uint32_t eval(int p, int q, bool *success) {
 		char *endptr;
 		unsigned long val;
 
-		if(tokens[p].type != NUM) {
+		if(tokens[p].type == REG) {
+			if(!read_register(tokens[p].str, &val1)) {
+				*success = false;
+				return 0;
+			}
+			return val1;
+		}
+
+		if(tokens[p].type != NUM && tokens[p].type != HEX) {
 			*success = false;
 			return 0;
 		}
 
 		errno = 0;
 		endptr = NULL;
+		base = (tokens[p].type == HEX ? 16 : 10);
 
-		val = strtoul(tokens[p].str, &endptr, 10);
+		val = strtoul(tokens[p].str, &endptr, base);
 
 		if(errno == ERANGE ||
 				endptr == tokens[p].str ||
@@ -231,6 +302,14 @@ static uint32_t eval(int p, int q, bool *success) {
 	op = find_dominant_op(p, q);
 
 	if(op < 0) {
+		if(tokens[p].type == '!') {
+			val1 = eval(p + 1, q, success);
+			if(!*success) {
+				return 0;
+			}
+			return !val1;
+		}
+
 		*success = false;
 		return 0;
 	}
@@ -241,6 +320,14 @@ static uint32_t eval(int p, int q, bool *success) {
 
 	if(!*success) {
 		return 0;
+	}
+
+	if(op_type == AND && val1 == 0) {
+		return 0;
+	}
+
+	if(op_type == OR && val1 != 0) {
+		return 1;
 	}
 
 	val2 = eval(op + 1, q, success);
@@ -266,6 +353,18 @@ static uint32_t eval(int p, int q, bool *success) {
 			}
 
 			return val1 / val2;
+
+		case EQ:
+			return val1 == val2;
+
+		case NEQ:
+			return val1 != val2;
+
+		case AND:
+			return val1 && val2;
+
+		case OR:
+			return val1 || val2;
 
 		default:
 			*success = false;
