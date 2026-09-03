@@ -118,27 +118,29 @@ static bool check_parentheses(int p, int q, bool *success) {
 
 	enclosed = (tokens[p].type == '(' && tokens[q].type == ')');
 
-	for (i = p; i <= q; i++) {
+	for(i = p; i <= q; i ++) {
+		if(tokens[i].type == '(') {
+			depth ++;
+		}
+		else if(tokens[i].type == ')') {
+			depth --;
 
-		if (tokens[i].type == '(') {
-			depth++;
-		} else if (tokens[i].type == ')') {
-			depth--;
-
-			if (depth < 0) {
-			*success = false;
-			return false;
+			if(depth < 0) {
+				*success = false;
+				return false;
+			}
 		}
 
-		if (depth == 0 && i < q) {
+		if(depth == 0 && i < q) {
 			enclosed = false;
 		}
 	}
-	if (depth != 0) {
+
+	if(depth != 0) {
 		*success = false;
 		return false;
 	}
-	}
+
 	return enclosed;
 }
 
@@ -152,7 +154,7 @@ static int precedence(int op) {
 		case '*':
 		case '/':
 			return 2;
-			
+
 		default:
 			return -1;
 	}
@@ -295,4 +297,3 @@ uint32_t expr(char *e, bool *success) {
 
 	return result;
 }
-

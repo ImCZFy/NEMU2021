@@ -152,13 +152,15 @@ static int cmd_x(char *args) {
 }
 
 static int cmd_p(char *args) {
+	bool success;
+	uint32_t result;
+
 	if (args == NULL) {
 		printf("Usage: p EXPR\n");
 		return 0;
 	}
 
-	bool success;
-	uint32_t result = expr(args, &success);
+	result = expr(args, &success);
 
 	if (success) {
 		printf("Result: %u (0x%08x)\n", result, result);
