@@ -18,6 +18,34 @@ void init_wp_pool() {
 	free_ = wp_pool;
 }
 
-/* TODO: Implement the functionality of watchpoint */
+WP *new_wp(void) {
+	WP *wp;
 
+	Assert(free_ != NULL, "No free watchpoint");
+
+	wp = free_;
+	free_ = free_->next;
+
+	wp->next = head;
+	head = wp;
+
+	return wp;
+}
+
+void free_wp(WP *wp) {
+	WP **current;
+
+	Assert(wp != NULL, "Can not free a null watchpoint");
+
+	current = &head;
+	while(*current != NULL && *current != wp) {
+		current = &(*current)->next;
+	}
+
+	Assert(*current == wp, "Watchpoint %d is not in use", wp->NO);
+
+	*current = wp->next;
+	wp->next = free_;
+	free_ = wp;
+}
 
