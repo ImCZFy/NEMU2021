@@ -47,6 +47,10 @@ static int cmd_x(char *args);
 
 static int cmd_p(char *args);
 
+static int cmd_w(char *args);
+
+static int cmd_d(char *args);
+
 static struct {
 	char *name;
 	char *description;
@@ -56,9 +60,11 @@ static struct {
 	{ "c", "Continue the execution of the program", cmd_c },
 	{ "q", "Exit NEMU", cmd_q },
 	{ "si", "Step N instructions exactly. The default value of N is 1.", cmd_si },
-	{ "info", "Print the information of registers or watchpoints. Usage: info r", cmd_info },
+	{ "info", "Print registers or watchpoints. Usage: info r|w", cmd_info },
 	{ "x", "Scan the memory. Usage: x N EXPR", cmd_x },
 	{ "p", "Evaluate the expression EXPR and print its value. Usage: p EXPR", cmd_p },
+	{ "w", "Set a watchpoint. Usage: w EXPR", cmd_w },
+	{ "d", "Delete a watchpoint. Usage: d N", cmd_d },
 };
 
 #define NR_CMD (sizeof(cmd_table) / sizeof(cmd_table[0]))
@@ -105,7 +111,7 @@ static int cmd_info(char *args) {
 	int i;
 
     if (args == NULL || sscanf(args, " %c %c", &subcmd, &extra) != 1) {
-        printf("Usage: info r\n");
+        printf("Usage: info r|w\n");
         return 0;
     }
 
@@ -118,7 +124,7 @@ static int cmd_info(char *args) {
 		printf("eflags  0x%08x\n", cpu.eflags.val);
 
 	} else if (subcmd == 'w') {
-		// TODO: Implement watchpoint information display in the following PA.
+		print_watchpoints();
 	}
 	else {
 		printf("Unknown subcommand '%c'\n", subcmd);
@@ -192,6 +198,58 @@ static int cmd_p(char *args) {
 	} else {
 		printf("Invalid expression: %s\n", args);
 	}
+	return 0;
+}
+
+static int cmd_w(char *args) {
+	WP *wp;
+	bool success;
+
+	if(args == NULL) {
+		printf("Usage: w EXPR\n");
+		return 0;
+	}
+
+	while(isspace((unsigned char)*args)) {
+		args ++;
+	}
+
+	if(*args == '\0') {
+		printf("Usage: w EXPR\n");
+		return 0;
+	}
+
+	if(strlen(args) >= WP_EXPR_LEN) {
+		printf("Watchpoint expression is too long\n");
+		return 0;
+	}
+
+	wp = add_watchpoint(args, &success);
+	if(!success) {
+		printf("Invalid expression: %s\n", args);
+		return 0;
+	}
+
+	printf("Watchpoint %d: %s\n", wp->NO, wp->expression);
+	printf("Initial value = %u (0x%08x)\n", wp->value, wp->value);
+	return 0;
+}
+
+static int cmd_d(char *args) {
+	int no;
+	char extra;
+
+	if(args == NULL || sscanf(args, " %d %c", &no, &extra) != 1 || no < 0) {
+		printf("Usage: d N\n");
+		return 0;
+	}
+
+	if(!delete_watchpoint(no)) {
+		printf("Watchpoint %d does not exist\n", no);
+		return 0;
+	}
+
+	printf("Watchpoint %d deleted\n", no);
 	return 0;
 }
 
