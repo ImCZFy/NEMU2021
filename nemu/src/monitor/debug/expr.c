@@ -17,7 +17,8 @@ enum {
 	NEQ,
 	AND,
 	OR,
-	NEG
+	NEG,
+	DEREF
 };
 
 static struct rule {
@@ -136,6 +137,10 @@ static void classify_unary_operators(void) {
 		if(tokens[i].type == '-' &&
 				(i == 0 || !token_ends_operand(tokens[i - 1].type))) {
 			tokens[i].type = NEG;
+		}
+		else if(tokens[i].type == '*' &&
+				(i == 0 || !token_ends_operand(tokens[i - 1].type))) {
+			tokens[i].type = DEREF;
 		}
 	}
 }
@@ -318,7 +323,9 @@ static uint32_t eval(int p, int q, bool *success) {
 	op = find_dominant_op(p, q);
 
 	if(op < 0) {
-		if(tokens[p].type == '!' || tokens[p].type == NEG) {
+		if(tokens[p].type == '!' ||
+				tokens[p].type == NEG ||
+				tokens[p].type == DEREF) {
 			val1 = eval(p + 1, q, success);
 			if(!*success) {
 				return 0;
@@ -326,6 +333,15 @@ static uint32_t eval(int p, int q, bool *success) {
 
 			if(tokens[p].type == NEG) {
 				return 0u - val1;
+			}
+
+			if(tokens[p].type == DEREF) {
+				if((uint64_t)val1 + 4 > HW_MEM_SIZE) {
+					*success = false;
+					return 0;
+				}
+
+				return swaddr_read((swaddr_t)val1, 4);
 			}
 
 			return !val1;
