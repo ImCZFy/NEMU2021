@@ -16,7 +16,8 @@ enum {
 	EQ,
 	NEQ,
 	AND,
-	OR
+	OR,
+	NEG
 };
 
 static struct rule {
@@ -122,6 +123,21 @@ static bool make_token(char *e) {
 	}
 
 	return true; 
+}
+
+static bool token_ends_operand(int type) {
+	return type == NUM || type == HEX || type == REG || type == ')';
+}
+
+static void classify_unary_operators(void) {
+	int i;
+
+	for(i = 0; i < nr_token; i ++) {
+		if(tokens[i].type == '-' &&
+				(i == 0 || !token_ends_operand(tokens[i - 1].type))) {
+			tokens[i].type = NEG;
+		}
+	}
 }
 
 static bool check_parentheses(int p, int q, bool *success) {
@@ -302,11 +318,16 @@ static uint32_t eval(int p, int q, bool *success) {
 	op = find_dominant_op(p, q);
 
 	if(op < 0) {
-		if(tokens[p].type == '!') {
+		if(tokens[p].type == '!' || tokens[p].type == NEG) {
 			val1 = eval(p + 1, q, success);
 			if(!*success) {
 				return 0;
 			}
+
+			if(tokens[p].type == NEG) {
+				return 0u - val1;
+			}
+
 			return !val1;
 		}
 
@@ -385,6 +406,8 @@ uint32_t expr(char *e, bool *success) {
 	if (e == NULL || !make_token(e) || nr_token == 0) {
 		return 0;
 	}
+
+	classify_unary_operators();
 
 	*success = true;
 
